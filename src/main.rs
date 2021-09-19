@@ -1,4 +1,5 @@
 #![feature(bool_to_option)]
+#![feature(format_args_capture)]
 use std::{
     collections::HashMap,
     fs,
@@ -88,6 +89,12 @@ fn main() {
     let tex_files = files_with_extension(latex_directory, vec!["tex".into()], false);
     let snippet_files = files_with_extension(target_directory, vec!["cpp".into()], false);
 
+    // Finding snippets tagged as follows: 
+    /* 
+    // SNIPPET:BEGIN {some_cool_snippet_name}
+    ...some_cool_snippet_content...
+    // SNIPPET:END {some_cool_snippet_name}
+    */
     let snippet_pattern = regex::RegexBuilder::new(
         r"(// SNIPPET:BEGIN \{(?P<BEGIN>.*?)\}(?P<SNIPPET>.*?)// SNIPPET:END \{(?P<END>.*?)\})",
     )
@@ -95,6 +102,10 @@ fn main() {
     .build()
     .unwrap();
 
+    // Finding snippet inclusions that look something like this: 
+    /*
+    \lstinputlisting{some_cool_snippet_name.cpp}
+    */
     let include_pattern =
         regex::RegexBuilder::new(r"(\\lstinputlisting\{.*/(?P<SNIPPET_NAME>.*?)\.cpp.*?\})")
             .dot_matches_new_line(true)
@@ -126,26 +137,6 @@ fn main() {
         }
     }
 
-    // let snippets: Vec<Result<_, anyhow::Error>> = source_files
-    //     .iter()
-    //     .map(|file| {
-    //         let text = fs::read_to_string(file).context(format!("{:?}", file))?;
-    //         Ok(snippet_pattern
-    //             .captures_iter(&text)
-    //             .map(|captures| {
-    //                 Snippet::new(
-    //                     captures["BEGIN"].into(),
-    //                     Some(captures["SNIPPET"].into()),
-    //                     captures["END"].into(),
-    //                     true,
-    //                     false,
-    //                     false,
-    //                 )
-    //             })
-    //             .collect::<Vec<_>>())
-    //     })
-    //     .collect();
-
     for file in tex_files {
         let text = fs::read_to_string(&file).context(format!("{:?}", file));
         if let Ok(text) = text {
@@ -153,10 +144,18 @@ fn main() {
                 let snippet_name = &captures["SNIPPET_NAME"];
                 snippets
                     .entry(snippet_name.to_owned())
-                    .or_insert(
-                        Snippet::new(snippet_name.to_owned(), None, None, snippet_name.to_owned(), false, true, false)
-                            .expect("Failed at creating snippet from LaTeX include statement."),
-                    )
+                    .or_insert_with(|| {
+                        Snippet::new(
+                            snippet_name.to_owned(),
+                            None,
+                            None,
+                            snippet_name.to_owned(),
+                            false,
+                            true,
+                            false,
+                        )
+                        .expect("Failed at creating snippet from LaTeX include statement.")
+                    })
                     .latex = true;
             }
         } else {
@@ -173,138 +172,70 @@ fn main() {
         if let Ok(snippet_name) = snippet_name {
             snippets
                 .entry(snippet_name.clone())
-                .or_insert(
-                    Snippet::new(snippet_name.to_owned(), None, None, snippet_name.to_owned(), false, false, true)
-                        .expect("Failed at creating snippet from extracted snippet file."),
-                )
+                .or_insert_with(|| {
+                    Snippet::new(
+                        snippet_name.to_owned(),
+                        None,
+                        None,
+                        snippet_name.to_owned(),
+                        false,
+                        false,
+                        true,
+                    )
+                    .expect("Failed at creating snippet from extracted snippet file.")
+                })
                 .extracted = true;
         } else {
             eprintln!("{:#?}", snippet_name);
         }
     }
 
-    
-
-    // let snippet_files: Vec<_> = snippet_files
-    //     .iter()
-    //     .map(|file| file.file_name().map(|name| name.to_str().to_owned()))
-    //     .flatten()
-    //     .collect();
-
-    // let snippet_inclusions: Vec<Result<_, anyhow::Error>> = tex_files
-    //     .iter()
-    //     .map(|file| {
-    //         let text = fs::read_to_string(file).context(format!("{:?}", file))?;
-    //         Ok(include_pattern
-    //             .captures_iter(&text)
-    //             .map(|captures| captures["SNIPPET_NAME"].to_string())
-    //             .collect::<Vec<_>>())
-    //     })
-    //     .collect();
-
-
-
     // 1. List found snippets and inclusions
     let mut snippets: Vec<_> = snippets.into_iter().map(|entry| entry.1).collect();
     snippets.sort();
 
+    let mut count_width = 0;
+    let mut snippet_name_width = "Snippet name:".len();
+    let mut file_name_width = "Source file:".len();
+
     for (i, snippet) in snippets.iter().enumerate() {
-        println!("{}.:\t{} ()\t({:?})", i + 1, snippet.name, snippet.source_file);
+        count_width = format!("{}.:", i + 1).len().max(count_width);
+        snippet_name_width = snippet.name.len().max(snippet_name_width);
+        let file_name = snippet
+            .source_file
+            .as_ref()
+            .and_then(|path| path.file_name().and_then(|name| name.to_str()))
+            .unwrap_or("");
+        file_name_width = file_name.len().max(file_name_width);
     }
 
-    // println!("\nInclude statements:\n");
+    let spacer = "    ";
 
-    // for (i, inclusion) in inclusion_collection.iter().enumerate() {
-    //     println!("{}.:\t{} ({})", i + 1, inclusion.1, inclusion.0);
-    // }
+    let header = format!(
+        "{:count_width$}{spacer}{:snippet_name_width$}{spacer}  Source file:",
+        "", "Snippet name:"
+    );
 
+    let header_top = format!("{:1$}", " ", header.len());
+    bunt::println!("{[underline]}", header_top);
+    
+    bunt::println!("{[underline]}", header);
+    // println!("{:_<width$}", "", width = header.len());
+    for (i, snippet) in snippets.iter().enumerate() {
+        let file_name = snippet
+            .source_file
+            .as_ref()
+            .and_then(|path| path.file_name().and_then(|name| name.to_str()))
+            .unwrap_or("");
+        println!(
+            "{:count_width$}{spacer}{:snippet_name_width$}{spacer}| {}",
+            format!("{}.:", i + 1),
+            snippet.name,
+            file_name
+        );
+    }
 
-
-    // let mut snippet_collection = vec![];
-    // for snippet_set in snippets.into_iter() {
-    //     if let Ok(snippet_set) = snippet_set {
-    //         for snippet in snippet_set.into_iter() {
-    //             if let Ok(snippet) = snippet {
-    //                 snippet_collection.push(snippet);
-    //             } else {
-    //                 eprintln!("{:#?}", snippet);
-    //             }
-    //         }
-    //     } else {
-    //         eprintln!("{:#?}", snippet_set);
-    //     }
-    // }
-
-    // snippet_collection.sort();
-
-    // let mut inclusion_collection = vec![];
-    // for inclusion_set in snippet_inclusions.into_iter() {
-    //     if let Ok(inclusion_set) = inclusion_set {
-    //         for inclusion in inclusion_set {
-    //             inclusion_collection.push(inclusion);
-    //         }
-    //     } else {
-    //         eprintln!("{:#?}", inclusion_set);
-    //     }
-    // }
-
-    // enum SnippetOccurence {
-    //     Source,
-    //     Include,
-    //     Extraction,
-    // }
-
-    // impl std::fmt::Display for SnippetOccurence {
-    //     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-    //         match self {
-    //             SnippetOccurence::SourceOnly => f.write_str("Source only"),
-    //             SnippetOccurence::IncludeOnly => f.write_str("Include only"),
-    //             SnippetOccurence::Both => f.write_str("Source and include"),
-    //         }
-    //     }
-    // }
-
-    // let snippet_collection: Vec<_> = snippet_collection
-    //     .into_iter()
-    //     .map(|snippet| {
-    //         (
-    //             if inclusion_collection.contains(&snippet.name) {
-    //                 SnippetOccurence::Both
-    //             } else {
-    //                 SnippetOccurence::SourceOnly
-    //             },
-    //             snippet,
-    //         )
-    //     })
-    //     .collect();
-    // let inclusion_collection: Vec<_> = inclusion_collection
-    //     .into_iter()
-    //     .map(|inclusion| {
-    //         (
-    //             if snippet_collection
-    //                 .iter()
-    //                 .map(|snippet| &snippet.1.name)
-    //                 .collect::<Vec<_>>()
-    //                 .contains(&&inclusion)
-    //             {
-    //                 SnippetOccurence::Both
-    //             } else {
-    //                 SnippetOccurence::IncludeOnly
-    //             },
-    //             inclusion,
-    //         )
-    //     })
-    //     .collect();
-
-    // for (i, snippet) in snippet_collection.iter().enumerate() {
-    //     println!("{}.:\t{} ({})", i + 1, snippet.1.name, snippet.0);
-    // }
-
-    // println!("\nInclude statements:\n");
-
-    // for (i, inclusion) in inclusion_collection.iter().enumerate() {
-    //     println!("{}.:\t{} ({})", i + 1, inclusion.1, inclusion.0);
-    // }
+    bunt::println!("{[underline]}", header_top);
 }
 
 fn files_with_extension(
