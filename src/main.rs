@@ -143,9 +143,10 @@ fn main() {
         let text = fs::read_to_string(&file).context(format!("{:?}", file));
         if let Ok(text) = text {
             for captures in snippet_pattern_active.captures_iter(&text) {
+                let new_lines: &[_] = &['\r', '\n'];
                 let snippet = Snippet::new(
                     captures.name("BEGIN").map(|hit| hit.as_str()),
-                    captures.name("SNIPPET").map(|hit| hit.as_str()),
+                    captures.name("SNIPPET").map(|hit| hit.as_str().trim_matches(new_lines)),
                     Some(file.clone()),
                     captures.name("END").map(|hit| hit.as_str()),
                     captures.name("COMMENT").map(|hit| hit.as_str()),
