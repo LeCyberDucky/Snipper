@@ -72,7 +72,7 @@ impl Snippet {
 }
 
 fn main() {
-    let arguments = App::new("Snipper").about("Collects snippets of code from source files into separate files for simple inclusion in LaTeX documents.")
+    let arguments = App::new("Snipper").about("Manages snippets of source code for simple inclusion in LaTeX documents, by collecting snippets of code from source files into separate files.\nSnippets in source files are found according to the pattern\n\n// SNIPPET:BEGIN {Worksheet 1 - A}${Optional comment about snippet}\nSNIPPET CONTENT\n// SNIPPET:END {Worksheet 1 - A}\n\nSnippet inclusions in LaTeX documents are found according to the pattern\n\n\\lstinputlisting[label = {Snippet/1/A}, caption = {}, captionpos = b]{\"Content/Snippets/Worksheet 1 - A.cpp\"}\n\nwhere the arguments are optional, and only the stem of the file path is important.\n\nSnippets can be marked as inactive by placing underscores in front of the snippet tags: _SNIPPET:BEGIN ... _SNIPPET:END. The already extracted snippet files of inactive snippets will not be overwritten on extraction.")
     .arg(Arg::with_name("Source")
         .long("Source").value_name("DIRECTORY")
         .takes_value(true)
