@@ -31,3 +31,8 @@ OPTIONS:
         --Source <DIRECTORY>    Root directory of source files
         --Target <DIRECTORY>    Directory, where snippets will be stored
 ```
+
+## Getting started
+The tool is built in [Rust](https://www.rust-lang.org/). Having installed Rust, download the repository and then build/run the tool by running the following command in the directory:
+
+`cargo +nightly run -- -h`
